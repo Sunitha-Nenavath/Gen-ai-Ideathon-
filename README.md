@@ -6,7 +6,7 @@ The agent helps customers discover drinks and pastries from a predefined coffee 
 
 ## 🚀 Live Demo
 
-[Open the Coffee Barista AI Agent](https://dcqiykrusdwbtvaj-aosnb.streamlit.app/)
+https://dcqiykrusdwbwtvajaosnb.streamlit.app/
 
 ## ✨ Features
 
