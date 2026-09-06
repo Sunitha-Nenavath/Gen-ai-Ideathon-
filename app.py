@@ -55,34 +55,8 @@ except Exception as e:
     st.error(f"Error loading menu: {e}")
     menu_items = []
 
-# Sidebar Menu & API Key Setup
+# Sidebar Menu
 with st.sidebar:
-    st.markdown("## 🔑 API Key Setup")
-    api_key_val = os.environ.get("GOOGLE_API_KEY", "")
-    
-    input_key = st.text_input(
-        "Gemini API Key",
-        value=api_key_val,
-        type="password",
-        help="Enter your Google Gemini API Key. Get one for free at https://aistudio.google.com/app/apikey",
-        key="sidebar_api_key"
-    )
-
-    if input_key.strip():
-        os.environ["GOOGLE_API_KEY"] = input_key.strip()
-        st.success("🟢 API Key configured")
-        if st.button("💾 Save Key to .env file"):
-            try:
-                with open(".env", "w") as f:
-                    f.write(f"GOOGLE_API_KEY={input_key.strip()}\n")
-                st.success("Saved API Key to `.env`!")
-            except Exception as ex:
-                st.error(f"Failed to save `.env`: {ex}")
-    else:
-        st.warning("⚠️ No API Key set.")
-        st.markdown("[👉 Get a free Gemini API Key](https://aistudio.google.com/app/apikey)")
-
-    st.markdown("---")
     st.markdown("## ☕ Coffee Shop Menu")
     st.markdown("Explore our offerings and ask the barista for recommendations.")
     st.markdown("---")
@@ -134,7 +108,7 @@ if prompt := st.chat_input("Ask for recommendations (e.g., 'What dairy-free past
         if not active_key or not active_key.strip():
             no_key_warning = (
                 "⚠️ **No API key provided.**\n\n"
-                "Please enter your **Gemini API Key** in the sidebar under **🔑 API Key Setup** to start chatting with the AI Barista.\n\n"
+                "Please configure your **GOOGLE_API_KEY** in Streamlit Secrets or environment variables to start chatting with the AI Barista.\n\n"
                 "👉 Don't have an API key? You can generate one for free at [Google AI Studio](https://aistudio.google.com/app/apikey)."
             )
             st.warning(no_key_warning)
@@ -182,7 +156,7 @@ if prompt := st.chat_input("Ask for recommendations (e.g., 'What dairy-free past
                     api_error_text = (
                         "🔑 **API Key Error**\n\n"
                         f"{err_str}\n\n"
-                        "Please verify that your Gemini API Key is valid and entered correctly in the sidebar under **🔑 API Key Setup**.\n\n"
+                        "Please verify that your Gemini API Key is valid and configured in Streamlit Secrets (`GOOGLE_API_KEY`).\n\n"
                         "👉 Get or create a key at [Google AI Studio](https://aistudio.google.com/app/apikey)."
                     )
                     st.error(api_error_text)
