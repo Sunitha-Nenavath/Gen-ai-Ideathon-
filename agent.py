@@ -1,7 +1,6 @@
 import json
 
 from google.adk.agents import LlmAgent
-from google.adk.apps import App
 
 
 def get_menu() -> str:
@@ -16,7 +15,7 @@ def get_menu() -> str:
 
 barista_agent = LlmAgent(
     name="barista_agent",
-    model="gemini-2.5-flash",
+    model="gemini-3.8-flash",
     instruction="""
 You are a friendly barista at Coffee Shop.
 
@@ -37,8 +36,3 @@ Always use get_menu() before making recommendations.
     tools=[get_menu]
 )
 
-
-app = App(
-    name="coffee_barista_app",
-    root_agent=barista_agent
-)

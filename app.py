@@ -1,12 +1,21 @@
 # app.py
-import streamlit as st
 import os
+import json
+import streamlit as st
+from dotenv import load_dotenv
 
+# Load environment variables from .env file if available
+load_dotenv()
+
+# Configure environment & API key fallback
 if "GOOGLE_API_KEY" in st.secrets:
     os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
-os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "FALSE"
+elif "GEMINI_API_KEY" in st.secrets:
+    os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+elif "GEMINI_API_KEY" in os.environ and "GOOGLE_API_KEY" not in os.environ:
+    os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
 
-import json
+os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "FALSE"
 
 # Set page config for a premium look
 st.set_page_config(
@@ -39,17 +48,41 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Load Menu for the sidebar
-# [START load_menu]
 try:
     with open("menu.json", "r") as f:
         menu_items = json.load(f)
 except Exception as e:
     st.error(f"Error loading menu: {e}")
     menu_items = []
-# [END load_menu]
 
-# Sidebar Menu & Configuration
+# Sidebar Menu & API Key Setup
 with st.sidebar:
+    st.markdown("## 🔑 API Key Setup")
+    api_key_val = os.environ.get("GOOGLE_API_KEY", "")
+    
+    input_key = st.text_input(
+        "Gemini API Key",
+        value=api_key_val,
+        type="password",
+        help="Enter your Google Gemini API Key. Get one for free at https://aistudio.google.com/app/apikey",
+        key="sidebar_api_key"
+    )
+
+    if input_key.strip():
+        os.environ["GOOGLE_API_KEY"] = input_key.strip()
+        st.success("🟢 API Key configured")
+        if st.button("💾 Save Key to .env file"):
+            try:
+                with open(".env", "w") as f:
+                    f.write(f"GOOGLE_API_KEY={input_key.strip()}\n")
+                st.success("Saved API Key to `.env`!")
+            except Exception as ex:
+                st.error(f"Failed to save `.env`: {ex}")
+    else:
+        st.warning("⚠️ No API Key set.")
+        st.markdown("[👉 Get a free Gemini API Key](https://aistudio.google.com/app/apikey)")
+
+    st.markdown("---")
     st.markdown("## ☕ Coffee Shop Menu")
     st.markdown("Explore our offerings and ask the barista for recommendations.")
     st.markdown("---")
@@ -75,8 +108,8 @@ if "session_id" not in st.session_state:
 
 if "runner" not in st.session_state:
     from google.adk.runners import InMemoryRunner
-    from agent import app
-    st.session_state.runner = InMemoryRunner(app=app)
+    from agent import barista_agent
+    st.session_state.runner = InMemoryRunner(agent=barista_agent)
 
 if "messages" not in st.session_state:
     st.session_state.messages = [
@@ -97,27 +130,63 @@ if prompt := st.chat_input("Ask for recommendations (e.g., 'What dairy-free past
 
     # Generate response
     with st.chat_message("assistant"):
-        try:
-            import asyncio
+        active_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        if not active_key or not active_key.strip():
+            no_key_warning = (
+                "⚠️ **No API key provided.**\n\n"
+                "Please enter your **Gemini API Key** in the sidebar under **🔑 API Key Setup** to start chatting with the AI Barista.\n\n"
+                "👉 Don't have an API key? You can generate one for free at [Google AI Studio](https://aistudio.google.com/app/apikey)."
+            )
+            st.warning(no_key_warning)
+            st.session_state.messages.append({"role": "assistant", "content": no_key_warning})
+        else:
+            try:
+                from google.genai import types
+                from google.adk.runners import InMemoryRunner
+                from agent import barista_agent
 
-            # Run the ADK runner asynchronously using asyncio.run
-            async def fetch_response():
-                return await st.session_state.runner.run_debug(
-                    prompt,
-                    session_id=st.session_state.session_id
-                )
+                # Ensure runner is created with agent
+                if "runner" not in st.session_state:
+                    st.session_state.runner = InMemoryRunner(agent=barista_agent)
 
-            res_events = asyncio.run(fetch_response())
+                user_id = "default_user"
+                session_id = st.session_state.session_id
+                runner = st.session_state.runner
 
-            response_text = "".join([
-                part.text
-                for event in res_events
-                if event.content and event.content.parts
-                for part in event.content.parts
-                if part.text
-            ])
+                # Ensure session exists
+                if not runner.session_service.get_session(app_name=runner.app_name, user_id=user_id, session_id=session_id):
+                    runner.session_service.create_session(app_name=runner.app_name, user_id=user_id, session_id=session_id)
 
-            st.markdown(response_text)
-            st.session_state.messages.append({"role": "assistant", "content": response_text})
-        except Exception as e:
-            st.error(f"Apologies, I ran into an error: {e}")
+                # Format message content
+                msg_content = types.Content(role="user", parts=[types.Part.from_text(text=prompt)])
+                
+                # Execute runner
+                res_events = list(runner.run(user_id=user_id, session_id=session_id, new_message=msg_content))
+
+                response_text = "".join([
+                    part.text
+                    for event in res_events
+                    if event.content and event.content.parts
+                    for part in event.content.parts
+                    if part.text
+                ])
+
+                if not response_text:
+                    response_text = "I'm happy to help! Let me know what preferences or dietary restrictions you have."
+
+                st.markdown(response_text)
+                st.session_state.messages.append({"role": "assistant", "content": response_text})
+            except Exception as e:
+                err_str = str(e)
+                if "API key" in err_str or "API_KEY" in err_str or "401" in err_str or "unauthorized" in err_str.lower():
+                    api_error_text = (
+                        "🔑 **API Key Error**\n\n"
+                        f"{err_str}\n\n"
+                        "Please verify that your Gemini API Key is valid and entered correctly in the sidebar under **🔑 API Key Setup**.\n\n"
+                        "👉 Get or create a key at [Google AI Studio](https://aistudio.google.com/app/apikey)."
+                    )
+                    st.error(api_error_text)
+                    st.session_state.messages.append({"role": "assistant", "content": api_error_text})
+                else:
+                    st.error(f"Apologies, I ran into an error: {e}")
+

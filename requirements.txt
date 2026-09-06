@@ -1,2 +1,4 @@
 google-adk
 streamlit==1.56.0
+python-dotenv
+
